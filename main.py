@@ -1,6 +1,7 @@
 import requests, os
 import tkinter as tk
 from tkinter import filedialog, messagebox
+import threading
 
 # Cấu hình headers của request
 headers = {
@@ -57,6 +58,11 @@ def download():
     else:
         messagebox.showwarning("Cảnh báo", "Vui lòng nhập ID và chọn thư mục!")
 
+# Hàm tạo một luồng phụ (worker thread), có nhiệm vụ chạy hàm download tải file ảnh
+def start_download_thread():
+    download_thread = threading.Thread(target=download)
+    download_thread.start()
+
 # Tạo cửa sổ chính
 window = tk.Tk()
 window.title("Pixiv Downloader 🎨")
@@ -79,7 +85,7 @@ download_btn.pack(pady=(10, 0))
 entry_dir_path = tk.Entry(window, width=100)
 entry_dir_path.pack(pady=(0, 10))
 
-download_btn = tk.Button(window, text="Tải xuống", command=download)
+download_btn = tk.Button(window, text="Tải xuống", command=start_download_thread)
 download_btn.pack(pady=10)
 
 # Chạy vòng lặp chính để hiện cửa sổ
