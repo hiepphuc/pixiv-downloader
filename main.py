@@ -22,8 +22,10 @@ def download():
 
     # 3. Kiểm tra (nếu người dùng có chọn thư mục và có nhập ID)
     if artwork_id_or_url and dir_path:
-        # Nếu là URL thì tách lấy cái phần id ở cuối, không thì nó là chính nó
-        artwork_id = artwork_id_or_url.split("/").pop()
+        # 1. Xóa dấu / dư ở 2 đầu (nếu có)
+        # 2. Tách lấy phần tử cuối cùng
+        # 3. Xóa phần tham số sau dấu ?
+        artwork_id = artwork_id_or_url.strip("/").split("/").pop().split("?")[0]
 
         print(f"ID: {artwork_id}")
         print(f"Lưu tại: {dir_path}")
