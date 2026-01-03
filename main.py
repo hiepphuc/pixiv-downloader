@@ -61,9 +61,15 @@ def download():
         
     else:
         messagebox.showwarning("Cảnh báo", "Vui lòng nhập ID và chọn thư mục!")
+    
+    # Đưa nút tải xuống về trạng thái bình thường bất kể tải được hay lỗi
+    download_btn.config(state=tk.NORMAL, text="Tải xuống")
 
 # Hàm tạo một luồng phụ (worker thread), có nhiệm vụ chạy hàm download tải file ảnh
 def start_download_thread():
+    # 1. Khóa nút lại ngay lập tức khi "tải xuống" và đổi chữ cho ngầu
+    download_btn.config(state=tk.DISABLED, text="Đang tải...")
+
     download_thread = threading.Thread(target=download)
     download_thread.start()
 
