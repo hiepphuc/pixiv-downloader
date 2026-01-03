@@ -33,6 +33,7 @@ def download():
 
         # Tải ảnh
         # Gọi API
+        label_log.config(text="Đang kết nối...")
         api_url = f"https://www.pixiv.net/ajax/illust/{artwork_id}/pages"
         response = requests.get(api_url, headers=headers)
 
@@ -41,7 +42,8 @@ def download():
             # Nếu request thành công thì tạo thư mục để lưu ảnh
             os.makedirs(dir_path, exist_ok=True)
 
-            for img in response.json()["body"]:
+            imgs:list = response.json()["body"]
+            for i, img in enumerate(imgs, 1):
                 original_img_url = img["urls"]["original"]
                 file_name = original_img_url.split("/").pop()
                 full_path = os.path.join(dir_path, file_name) # Dùng os.path.join để nối đường dẫn chuẩn theo hệ điều hành
@@ -52,6 +54,8 @@ def download():
                 with open(full_path, mode="wb") as file_img:
                     file_img.write(img_content)
                     print(f"Đã tải xong: {file_name}")
+                    label_log.config(text=f"Đang tải ảnh {i}/{len(imgs)}...")
+            label_log.config(text="Hoàn tất!")
         else:
             print(f"Lỗi không gọi được API: {response.status_code}")
         
@@ -87,6 +91,9 @@ entry_dir_path.pack(pady=(0, 10))
 
 download_btn = tk.Button(window, text="Tải xuống", command=start_download_thread)
 download_btn.pack(pady=10)
+
+label_log = tk.Label(window, text="")
+label_log.pack(pady=(10, 0))
 
 # Chạy vòng lặp chính để hiện cửa sổ
 window.mainloop()
