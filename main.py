@@ -21,49 +21,70 @@ def download():
     # 2. Lấy thư mục lưu
     dir_path:str = entry_dir_path.get()
 
-    # 3. Kiểm tra (nếu người dùng có chọn thư mục và có nhập ID)
-    if artwork_id_or_url and dir_path:
-        # 1. Xóa dấu / dư ở 2 đầu (nếu có)
-        # 2. Tách lấy phần tử cuối cùng
-        # 3. Xóa phần tham số sau dấu ?
-        artwork_id = artwork_id_or_url.strip("/").split("/").pop().split("?")[0]
+    # 3. Kiểm tra đầu vào: xem người dùng có chọn thư mục và có nhập ID hay không
+    if not artwork_id_or_url or not dir_path:
+        messagebox.showwarning("Cảnh báo", "Vui lòng nhập ID và chọn thư mục!")
+        return # Dừng hàm tại đây nếu thiếu dữ liệu
+    
+    # -------------------- Xử lý ID ---------------------
+    # Xóa dấu / dư ở 2 đầu (nếu có)
+    # Tách lấy phần tử cuối cùng
+    # Xóa phần tham số sau dấu ?
+    artwork_id = artwork_id_or_url.strip("/").split("/").pop().split("?")[0]
+    print(f"ID: {artwork_id} - Lưu tại: {dir_path}")
 
-        print(f"ID: {artwork_id}")
-        print(f"Lưu tại: {dir_path}")
-
-        # Tải ảnh
-        # Gọi API
+    try:
+        # 4. Gọi API
         label_log.config(text="Đang kết nối...")
         api_url = f"https://www.pixiv.net/ajax/illust/{artwork_id}/pages"
-        response = requests.get(api_url, headers=headers)
-
-        # Kiểm tra xem request có thành công không, có thì tải
-        if response.status_code == 200:
-            # Nếu request thành công thì tạo thư mục để lưu ảnh
-            os.makedirs(dir_path, exist_ok=True)
-
-            imgs:list = response.json()["body"]
-            for i, img in enumerate(imgs, 1):
-                original_img_url = img["urls"]["original"]
-                file_name = original_img_url.split("/").pop()
-                full_path = os.path.join(dir_path, file_name) # Dùng os.path.join để nối đường dẫn chuẩn theo hệ điều hành
-                
-                # Tải ảnh
-                img_content = requests.get(original_img_url, headers=headers).content
-                
-                with open(full_path, mode="wb") as file_img:
-                    file_img.write(img_content)
-                    print(f"Đã tải xong: {file_name}")
-                    label_log.config(text=f"Đang tải ảnh {i}/{len(imgs)}...")
-            label_log.config(text="Hoàn tất!")
-        else:
-            print(f"Lỗi không gọi được API: {response.status_code}")
+        response = requests.get(api_url, headers=headers, timeout=10) # Sau 10 giây không nhận phản hồi thì ném ra lỗi
+        response.raise_for_status() # Tự động báo lỗi nếu status code không phải 200
         
-    else:
-        messagebox.showwarning("Cảnh báo", "Vui lòng nhập ID và chọn thư mục!")
+        # 5. Tạo thư mục để lưu ảnh nếu request thành công thì 
+        os.makedirs(dir_path, exist_ok=True)
+
+        # 6. Tải từng ảnh
+        imgs:list = response.json()["body"]
+        for i, img in enumerate(imgs, 1):
+            # lấy URL của ảnh
+            original_img_url = img["urls"]["original"]
+            file_name = original_img_url.split("/").pop()
+            full_path = os.path.join(dir_path, file_name) # Dùng os.path.join để nối đường dẫn chuẩn theo hệ điều hành
+            
+            # Tải nội dung ảnh
+            img_content = requests.get(original_img_url, headers=headers, timeout=10).content
+            
+            # Ghi dữ liệu vào file ảnh
+            with open(full_path, mode="wb") as file_img:
+                file_img.write(img_content)
+
+            # Cập nhật giao diện
+            print(f"Đã tải xong: {file_name}")
+            label_log.config(text=f"Đang tải ảnh {i}/{len(imgs)}...")
+
+        label_log.config(text="Hoàn tất!")
+        messagebox.showinfo("Thành công", f"Đã tải xong {len(imgs)} ảnh!")
+        
+    # --- CÁC TẦNG BẢO VỆ ---
     
-    # Đưa nút tải xuống về trạng thái bình thường bất kể tải được hay lỗi
-    download_btn.config(state=tk.NORMAL, text="Tải xuống")
+    # Tầng 1: Lỗi mạng (Rớt mạng, Timeout, Link hỏng...)
+    except requests.exceptions.RequestException as e:
+        print(f"Lỗi mạng: {e}")
+        messagebox.showerror("Lỗi kết nối", "Không thể tải dữ liệu. Vui lòng kiểm tra mạng hoặc ID ảnh, URL Pixiv.")
+
+    # Tầng 2: Lỗi File (Ổ cứng đầy, không có quyền ghi...)
+    except OSError as e:
+        print(f"Lỗi ghi file: {e}")
+        messagebox.showerror("Lỗi File", f"Không thể lưu file. Có thể do ổ cứng đầy hoặc lỗi quyền hạn.\nChi tiết: {e}")
+
+    # Tầng 3: Lỗi lạ (Code bị bug, dữ liệu trả về sai định dạng...)
+    except Exception as e:
+        print(f"Lỗi không xác định: {e}")
+        messagebox.showerror("Lỗi Lạ", f"Đã xảy ra lỗi không mong muốn:\n{e}")
+
+    finally:
+        # Đưa nút tải xuống về trạng thái bình thường bất kể tải được hay lỗi
+        download_btn.config(state=tk.NORMAL, text="Tải xuống")
 
 # Hàm tạo một luồng phụ (worker thread), có nhiệm vụ chạy hàm download tải file ảnh
 def start_download_thread():
