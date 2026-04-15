@@ -5,9 +5,9 @@ import threading
 
 class PixivDownloaderApp:
     def __init__(self, root:tk.Tk) -> None:
-        self.window = root # 'root' chính là cái cửa sổ tk.Tk() được truyền vào
-        self.window.title("Pixiv Downloader 🎨")
-        self.window.geometry("1280x720")
+        self.window = root
+        self.window.title("Pixiv Downloader 🎨 (Hỗ trợ tài khoản)")
+        self.window.geometry("1280x800") # [MỚI] Tăng chiều cao cửa sổ lên một chút
 
         # Cấu hình headers của request
         self.headers = {
@@ -17,11 +17,17 @@ class PixivDownloaderApp:
 
         # Tạo Label hướng dẫn nhập ID hoặc URL
         self.label_id_or_url = tk.Label(self.window, text="Nhập Pixiv ID hoặc URL:")
-        self.label_id_or_url.pack(pady=(10, 0)) # pady là khoảng cách đệm trên/dưới
+        self.label_id_or_url.pack(pady=(10, 0))
 
         # Tạo ô input để nhập ID - URL
         self.entry_id_or_url = tk.Entry(self.window, width=100)
         self.entry_id_or_url.pack(pady=(0, 10))
+
+        # [MỚI] Tạo Label và ô nhập Cookie để tải ảnh giới hạn
+        self.label_cookie = tk.Label(self.window, text="Nhập PHPSESSID (Bắt buộc với ảnh R-18/Private, bỏ trống nếu tải ảnh thường):")
+        self.label_cookie.pack(pady=(10, 0))
+        self.entry_cookie = tk.Entry(self.window, width=100)
+        self.entry_cookie.pack(pady=(0, 10))
 
         # Tạo Button hướng dẫn nhập đường dẫn lưu file
         self.btn_select_dir_path = tk.Button(self.window, text="Chọn vị trí lưu ảnh:", command=self.select_dir_path)
@@ -35,7 +41,7 @@ class PixivDownloaderApp:
         self.btn_download = tk.Button(self.window, text="Tải xuống", command=self.start_download_thread)
         self.btn_download.pack(pady=10)
 
-        # Label ghi lại quá trình tải, ban đầu là "Chưa hiển thị gì cả (rỗng)"
+        # Label ghi lại quá trình tải
         self.label_log = tk.Label(self.window, text="")
         self.label_log.pack(pady=(10, 0))
 
@@ -45,82 +51,78 @@ class PixivDownloaderApp:
         self.entry_dir_path.insert(0, dir_path)
 
     def download(self):
-        # 1. Lấy ID/URL từ ô nhập liệu
         artwork_id_or_url:str = self.entry_id_or_url.get()
-
-        # 2. Lấy thư mục lưu
         dir_path:str = self.entry_dir_path.get()
+        cookie_val:str = self.entry_cookie.get().strip() # [MỚI] Lấy giá trị cookie
 
-        # 3. Kiểm tra đầu vào: xem người dùng có chọn thư mục và có nhập ID hay không
         if not artwork_id_or_url or not dir_path:
             self.btn_download.config(state=tk.NORMAL, text="Tải xuống")
             messagebox.showwarning("Cảnh báo", "Vui lòng nhập ID và chọn thư mục!")
-            return # Dừng hàm tại đây nếu thiếu dữ liệu
+            return 
         
-        # -------------------- Xử lý ID ---------------------
-        # Xóa dấu / dư ở 2 đầu (nếu có)
-        # Tách lấy phần tử cuối cùng
-        # Xóa phần tham số sau dấu ?
+        # [MỚI] Xử lý Cookie vào headers
+        if cookie_val:
+            # Nếu người dùng chưa gõ chữ PHPSESSID= ở đầu thì tự thêm vào
+            if "PHPSESSID" not in cookie_val:
+                cookie_val = f"PHPSESSID={cookie_val}"
+            self.headers["Cookie"] = cookie_val
+        else:
+            # Xóa cookie nếu phiên tải trước có nhập nhưng phiên này bỏ trống
+            if "Cookie" in self.headers:
+                del self.headers["Cookie"]
+
+        # Xử lý ID
         artwork_id = artwork_id_or_url.strip("/").split("/").pop().split("?")[0]
         print(f"ID: {artwork_id} - Lưu tại: {dir_path}")
 
         try:
-            # 4. Gọi API
             self.label_log.config(text="Đang kết nối...")
             api_url = f"https://www.pixiv.net/ajax/illust/{artwork_id}/pages"
-            response = requests.get(api_url, headers=self.headers, timeout=10) # Sau 10 giây không nhận phản hồi thì ném ra lỗi
-            response.raise_for_status() # Tự động báo lỗi nếu status code không phải 200
             
-            # 5. Tạo thư mục để lưu ảnh nếu request thành công thì 
+            response = requests.get(api_url, headers=self.headers, timeout=10) 
+            
+            # [MỚI] Bắt lỗi 401/404 cụ thể cho Pixiv khi thiếu quyền
+            if response.status_code == 404 or response.status_code == 401 or (response.json().get("error") == True):
+                raise ValueError("Không tìm thấy ảnh hoặc ảnh yêu cầu đăng nhập. Vui lòng nhập đúng PHPSESSID!")
+
+            response.raise_for_status() 
+            
             os.makedirs(dir_path, exist_ok=True)
 
-            # 6. Tải từng ảnh
             imgs:list = response.json()["body"]
             for i, img in enumerate(imgs, 1):
-                # lấy URL của ảnh
                 original_img_url = img["urls"]["original"]
                 file_name = original_img_url.split("/").pop()
-                full_path = os.path.join(dir_path, file_name) # Dùng os.path.join để nối đường dẫn chuẩn theo hệ điều hành
+                full_path = os.path.join(dir_path, file_name) 
                 
-                # Tải nội dung ảnh
                 img_content = requests.get(original_img_url, headers=self.headers, timeout=10).content
                 
-                # Ghi dữ liệu vào file ảnh
                 with open(full_path, mode="wb") as file_img:
                     file_img.write(img_content)
 
-                # Cập nhật giao diện
                 print(f"Đã tải xong: {file_name}")
                 self.label_log.config(text=f"Đang tải ảnh {i}/{len(imgs)}...")
 
             self.label_log.config(text="Hoàn tất!")
             messagebox.showinfo("Thành công", f"Đã tải xong {len(imgs)} ảnh!")
             
-        # --- CÁC TẦNG BẢO VỆ ---
-        
-        # Tầng 1: Lỗi mạng (Rớt mạng, Timeout, Link hỏng...)
         except requests.exceptions.RequestException as e:
             print(f"Lỗi mạng: {e}")
-            messagebox.showerror("Lỗi kết nối", "Không thể tải dữ liệu. Vui lòng kiểm tra mạng hoặc ID ảnh, URL Pixiv.")
-
-        # Tầng 2: Lỗi File (Ổ cứng đầy, không có quyền ghi...)
+            messagebox.showerror("Lỗi kết nối", "Không thể tải dữ liệu. Vui lòng kiểm tra mạng hoặc ID ảnh.")
+        except ValueError as e: # [MỚI] Xử lý lỗi báo thiếu quyền
+            print(f"Lỗi quyền truy cập: {e}")
+            messagebox.showerror("Lỗi Quyền/Đăng nhập", str(e))
         except OSError as e:
             print(f"Lỗi ghi file: {e}")
-            messagebox.showerror("Lỗi File", f"Không thể lưu file. Có thể do ổ cứng đầy hoặc lỗi quyền hạn.\nChi tiết: {e}")
-
-        # Tầng 3: Lỗi lạ (Code bị bug, dữ liệu trả về sai định dạng...)
+            messagebox.showerror("Lỗi File", f"Không thể lưu file.\nChi tiết: {e}")
         except Exception as e:
             print(f"Lỗi không xác định: {e}")
             messagebox.showerror("Lỗi Lạ", f"Đã xảy ra lỗi không mong muốn:\n{e}")
-
         finally:
-            # Đưa nút tải xuống về trạng thái bình thường bất kể tải được hay lỗi
             self.btn_download.config(state=tk.NORMAL, text="Tải xuống")
-    # Hàm tạo một luồng phụ (worker thread), có nhiệm vụ chạy hàm download (song song với luồng chính chạy chương trình) tải file ảnh
-    def start_download_thread(self):
-        # 1. Khóa nút lại ngay lập tức khi "tải xuống" và đổi chữ cho ngầu
-        self.btn_download.config(state=tk.DISABLED, text="Đang tải...")
 
+    def start_download_thread(self):
+        self.btn_download.config(state=tk.DISABLED, text="Đang tải...")
         download_thread = threading.Thread(target=self.download)
         download_thread.start()
 
