@@ -6,7 +6,7 @@ import threading
 class PixivDownloaderApp:
     def __init__(self, root:tk.Tk) -> None:
         self.window = root
-        self.window.title("Pixiv Downloader 🎨 (Hỗ trợ tải cần tài khoản)")
+        self.window.title("Pixiv Downloader 🎨 (Hỗ trợ tài khoản)")
         self.window.geometry("1280x800") # [MỚI] Tăng chiều cao cửa sổ lên một chút
 
         # Cấu hình headers của request
